@@ -42,7 +42,9 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget _buildPage() {
     switch (_selectedIndex) {
       case 0:
-        return const Center(child: Text('Home Page', style: TextStyle(fontSize: 24)));
+        return const Center(
+          child: Text('Home Page', style: TextStyle(fontSize: 24)),
+        );
       case 1:
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -50,11 +52,16 @@ class _MyHomePageState extends State<MyHomePage> {
             const Text('Counter Page'),
             Text('$_counter', style: const TextStyle(fontSize: 32)),
             const SizedBox(height: 10),
-            ElevatedButton(onPressed: _incrementCounter, child: const Text('Increase'))
+            ElevatedButton(
+              onPressed: _incrementCounter,
+              child: const Text('Increase'),
+            ),
           ],
         );
       case 2:
-        return const Center(child: Text('Settings Page', style: TextStyle(fontSize: 24)));
+        return const Center(
+          child: Text('Settings Page', style: TextStyle(fontSize: 24)),
+        );
       default:
         return const SizedBox();
     }
@@ -71,12 +78,16 @@ class _MyHomePageState extends State<MyHomePage> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.plus_one), label: 'Counter'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
         ],
       ),
     );
   }
 }
+
 class DetailPage extends StatelessWidget {
   final int counter;
 
@@ -85,9 +96,7 @@ class DetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Detail Page'),
-      ),
+      appBar: AppBar(title: const Text('Detail Page')),
       body: Center(
         child: Text(
           'Counter value: $counter',
