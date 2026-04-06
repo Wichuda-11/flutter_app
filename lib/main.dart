@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'dart:io';
+import 'package:flutter/foundation.dart'; // สำหรับ kIsWeb
+import 'dart:io' as io;
+import 'package:universal_html/html.dart' as html;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
@@ -196,86 +198,183 @@ class _HomePageState extends State<HomePage> {
       });
     }
   }
+  Future<void> generateAndSharePdf(
+  BuildContext context,
+  List<Transaction> transactions,
+) async {
+  final pdf = pw.Document();
 
-  Future<void> generateAndSharePdf(List<Transaction> transactions) async {
-    final pdf = pw.Document();
+  // โหลดฟอนต์
+  final fontData = await rootBundle.load("assets/fonts/Prompt-Regular.ttf");
+  final ttf = pw.Font.ttf(fontData);
 
-    // โหลดฟอนต์ไทย
-    final fontData = await rootBundle.load("assets/fonts/Prompt-Regular.ttf");
-    final ttf = pw.Font.ttf(fontData);
+  final boldFontData =
+      await rootBundle.load("assets/fonts/Prompt-Bold.ttf");
+  final ttfBold = pw.Font.ttf(boldFontData);
 
-    final boldFontData =
-        await rootBundle.load("assets/fonts/Prompt-Bold.ttf");
-    final ttfBold = pw.Font.ttf(boldFontData);
+  final formatter = NumberFormat('#,###');
 
-    final formatter = NumberFormat('#,###');
+  double totalIncome = transactions
+      .where((t) => t.isIncome)
+      .fold(0, (sum, t) => sum + t.amount);
 
-    double totalIncome = transactions
-        .where((t) => t.isIncome)
-        .fold(0, (sum, t) => sum + t.amount);
+  double totalExpense = transactions
+      .where((t) => !t.isIncome)
+      .fold(0, (sum, t) => sum + t.amount);
 
-    double totalExpense = transactions
-        .where((t) => !t.isIncome)
-        .fold(0, (sum, t) => sum + t.amount);
+  double balance = totalIncome - totalExpense;
 
-    double balance = totalIncome - totalExpense;
+  pdf.addPage(
+    pw.Page(
+      build: (context) {
+        return pw.DefaultTextStyle(
+          style: pw.TextStyle(font: ttf, fontSize: 12),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('รายงานรายรับรายจ่าย',
+                  style: pw.TextStyle(font: ttfBold, fontSize: 20)),
+              pw.SizedBox(height: 10),
+              pw.Text('รายรับ: ${formatter.format(totalIncome)}'),
+              pw.Text('รายจ่าย: ${formatter.format(totalExpense)}'),
+              pw.Text('คงเหลือ: ${formatter.format(balance)}'),
+              pw.SizedBox(height: 20),
 
-    pdf.addPage(
-      pw.Page(
-        build: (context) {
-          return pw.DefaultTextStyle(
-            style: pw.TextStyle(font: ttf, fontSize: 12),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'รายงานรายรับรายจ่าย',
-                  style: pw.TextStyle(
-                    font: ttfBold,
-                    fontSize: 20,
-                  ),
-                ),
+              pw.Table.fromTextArray(
+                headers: ['วันที่','รายการ', 'ประเภท', 'จำนวนเงิน'],
+                data: transactions.map((t) {
+                  return [
+                    DateFormat('dd/MM/yyyy').format(t.date),
+                    t.title,
+                    t.isIncome ? 'รายรับ' : 'รายจ่าย',
+                    formatter.format(t.amount),
+                  ];
+                }).toList(),
+                headerStyle: pw.TextStyle(font: ttfBold),
+                cellStyle: pw.TextStyle(font: ttf),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
 
-                pw.SizedBox(height: 10),
+  final bytes = await pdf.save();
 
-                pw.Text('รายรับ: ${formatter.format(totalIncome)}'),
-                pw.Text('รายจ่าย: ${formatter.format(totalExpense)}'),
-                pw.Text('คงเหลือ: ${formatter.format(balance)}'),
+  // ✅ แยก platform ตรงนี้
+  if (kIsWeb) {
+    final blob = html.Blob([bytes]);
+    final url = html.Url.createObjectUrlFromBlob(blob);
 
-                pw.SizedBox(height: 20),
+    // ✅ ดาวน์โหลด
+    final anchor = html.AnchorElement(href: url)
+      ..setAttribute("download", "report.pdf")
+      ..click();
 
-                pw.Table.fromTextArray(
-                  headers: ['วันที่','รายการ', 'ประเภท', 'จำนวนเงิน'],
-                  data: transactions.map((t) {
-                    return [
-                      DateFormat('dd/MM/yyyy').format(t.date),
-                      t.title,
-                      t.isIncome ? 'รายรับ' : 'รายจ่าย',
-                      formatter.format(t.amount),
-                    ];
-                  }).toList(),
-                  headerStyle: pw.TextStyle(font: ttfBold),
-                  cellStyle: pw.TextStyle(font: ttf),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
+    // ✅ เปิดดูใน tab ใหม่ (เพิ่ม UX)
+    html.window.open(url, "_blank");
 
-    final output = await getTemporaryDirectory();
-    final file = File("${output.path}/report.pdf");
-    await file.writeAsBytes(await pdf.save());
+    // ✅ delay revoke กันไฟล์โหลดไม่ทัน
+    Future.delayed(Duration(seconds: 1), () {
+      html.Url.revokeObjectUrl(url);
+    });
+
+  } else {
+    final dir = await getTemporaryDirectory();
+    final file = io.File("${dir.path}/report.pdf");
+    await file.writeAsBytes(bytes);
 
     final box = context.findRenderObject() as RenderBox?;
 
     await Share.shareXFiles(
       [XFile(file.path)],
       text: 'รายงานรายรับรายจ่าย',
-      sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
+      sharePositionOrigin:
+          box!.localToGlobal(Offset.zero) & box.size,
     );
   }
+}
+
+  // Future<void> generateAndSharePdf(List<Transaction> transactions) async {
+  //   final pdf = pw.Document();
+
+  //   // โหลดฟอนต์ไทย
+  //   final fontData = await rootBundle.load("assets/fonts/Prompt-Regular.ttf");
+  //   final ttf = pw.Font.ttf(fontData);
+
+  //   final boldFontData =
+  //       await rootBundle.load("assets/fonts/Prompt-Bold.ttf");
+  //   final ttfBold = pw.Font.ttf(boldFontData);
+
+  //   final formatter = NumberFormat('#,###');
+
+  //   double totalIncome = transactions
+  //       .where((t) => t.isIncome)
+  //       .fold(0, (sum, t) => sum + t.amount);
+
+  //   double totalExpense = transactions
+  //       .where((t) => !t.isIncome)
+  //       .fold(0, (sum, t) => sum + t.amount);
+
+  //   double balance = totalIncome - totalExpense;
+
+  //   pdf.addPage(
+  //     pw.Page(
+  //       build: (context) {
+  //         return pw.DefaultTextStyle(
+  //           style: pw.TextStyle(font: ttf, fontSize: 12),
+  //           child: pw.Column(
+  //             crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //             children: [
+  //               pw.Text(
+  //                 'รายงานรายรับรายจ่าย',
+  //                 style: pw.TextStyle(
+  //                   font: ttfBold,
+  //                   fontSize: 20,
+  //                 ),
+  //               ),
+
+  //               pw.SizedBox(height: 10),
+
+  //               pw.Text('รายรับ: ${formatter.format(totalIncome)}'),
+  //               pw.Text('รายจ่าย: ${formatter.format(totalExpense)}'),
+  //               pw.Text('คงเหลือ: ${formatter.format(balance)}'),
+
+  //               pw.SizedBox(height: 20),
+
+  //               pw.Table.fromTextArray(
+  //                 headers: ['วันที่','รายการ', 'ประเภท', 'จำนวนเงิน'],
+  //                 data: transactions.map((t) {
+  //                   return [
+  //                     DateFormat('dd/MM/yyyy').format(t.date),
+  //                     t.title,
+  //                     t.isIncome ? 'รายรับ' : 'รายจ่าย',
+  //                     formatter.format(t.amount),
+  //                   ];
+  //                 }).toList(),
+  //                 headerStyle: pw.TextStyle(font: ttfBold),
+  //                 cellStyle: pw.TextStyle(font: ttf),
+  //               ),
+  //             ],
+  //           ),
+  //         );
+  //       },
+  //     ),
+  //   );
+
+  //   final output = await getTemporaryDirectory();
+  //   final file = File("${output.path}/report.pdf");
+  //   await file.writeAsBytes(await pdf.save());
+
+  //   final box = context.findRenderObject() as RenderBox?;
+
+  //   await Share.shareXFiles(
+  //     [XFile(file.path)],
+  //     text: 'รายงานรายรับรายจ่าย',
+  //     sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -348,8 +447,8 @@ class _HomePageState extends State<HomePage> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 ElevatedButton.icon(
-                  onPressed: () {
-                    generateAndSharePdf(transactions);
+                  onPressed: () async {
+                    await generateAndSharePdf(context, transactions);
                   },
                   icon: Icon(Icons.picture_as_pdf),
                   label: Text('แชร์ PDF'),
