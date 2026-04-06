@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1094652614875",
+    "project_id": "manage-money-3aa5f",
+    "storage_bucket": "manage-money-3aa5f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1094652614875:android:d92dd0583f5a13969294fe",
+        "android_client_info": {
+          "package_name": "com.jyb.flutterapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB9JVf2ZwkxZtIPC998KqtPelpSXAgj2Pg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
