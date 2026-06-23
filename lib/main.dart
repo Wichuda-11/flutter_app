@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart'; // สำหรับ kIsWeb
+import 'package:flutter/foundation.dart';
 import 'dart:io' as io;
 import 'package:universal_html/html.dart' as html;
 import 'package:pdf/pdf.dart';
@@ -12,7 +12,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // 👈 สำคัญ
+  WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
@@ -23,15 +23,21 @@ void main() async {
 
 class Transaction {
   String title;
+  double incomeAmount;
   double amount;
   bool isIncome;
   DateTime date;
+  int quantity;
+  double pricePerItem;
 
   Transaction({
     required this.title,
+    required this.incomeAmount,
     required this.amount,
     required this.isIncome,
     required this.date,
+    required this.quantity,
+    required this.pricePerItem,
   });
 }
 
@@ -53,14 +59,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<Transaction> transactions = [];
 
-  DateTime selectedMonth = DateTime.now();
   DateTime selectedDate = DateTime.now();
 
   List<Transaction> get filteredTransactions {
     return transactions.where((t) {
       return t.date.year == selectedDate.year &&
-            t.date.month == selectedDate.month &&
-            t.date.day == selectedDate.day;
+          t.date.month == selectedDate.month &&
+          t.date.day == selectedDate.day;
     }).toList();
   }
 
@@ -72,111 +77,460 @@ class _HomePageState extends State<HomePage> {
       .where((t) => !t.isIncome)
       .fold(0, (sum, t) => sum + t.amount);
 
-  
-
-  // void addTransaction(String title, double amount, bool isIncome) {
-  //   setState(() {
-  //     transactions.add(Transaction(
-  //       title: title,
-  //       amount: amount,
-  //       isIncome: isIncome,
-  //       //date: DateTime.now(),
-  //       date: selectedDate,
-  //     ));
-  //   });
-  // }
-  void addTransaction(String title, double amount, bool isIncome, DateTime date) {
+  void addTransaction(
+    String title,
+    double amount,
+    double incomeAmount,
+    bool isIncome,
+    DateTime date,
+    int quantity,
+    double pricePerItem,
+  ) {
     setState(() {
-      transactions.add(Transaction(
-        title: title,
-        amount: amount,
-        isIncome: isIncome,
-        date: date, // 👈 ใช้ค่าที่ส่งมา
-      ));
+      transactions.add(
+        Transaction(
+          title: title,
+          amount: amount,
+          incomeAmount: incomeAmount,
+          isIncome: isIncome,
+          date: date,
+          quantity: quantity,
+          pricePerItem: pricePerItem,
+        ),
+      );
+    });
+  }
+
+  void updateTransaction(int index, Transaction transaction) {
+    if (index < 0 || index >= transactions.length) return;
+
+    setState(() {
+      transactions[index] = transaction;
     });
   }
 
   void showAddDialog() {
     String title = '';
+    int quantity = 1;
+    double pricePerItem = 0;
+    double incomeAmount = 0;
     double amount = 0;
     bool isIncome = true;
-    DateTime selectedDate = DateTime.now();
+    DateTime addDate = selectedDate;
 
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setStateDialog) {
           return AlertDialog(
-            title: Text('เพิ่มรายการ'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  decoration: InputDecoration(labelText: 'ชื่อรายการ'),
-                  onChanged: (value) => title = value,
-                ),
-                TextField(
-                  decoration: InputDecoration(labelText: 'จำนวนเงิน'),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) =>
-                      amount = double.tryParse(value) ?? 0,
-                ),
-
-                SizedBox(height: 10),
-
-                // 👇 เลือกวันที่
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "วันที่: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
+            title: const Text('เพิ่มรายการ'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'ชื่อรายการ',
                     ),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                        );
+                    onChanged: (value) => title = value,
+                  ),
 
-                        if (picked != null) {
-                          setStateDialog(() {
-                            selectedDate = picked;
-                          });
-                        }
-                      },
-                      child: Text("เลือกวันที่"),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: 10),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(isIncome ? 'รายรับ 💰' : 'รายจ่าย 💸'),
-                    Switch(
-                      value: isIncome,
+                  if (!isIncome)
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'จำนวนชิ้น',
+                      ),
+                      keyboardType: TextInputType.number,
                       onChanged: (value) {
+                        quantity = int.tryParse(value) ?? 1;
                         setStateDialog(() {
-                          isIncome = value;
+                          amount = quantity * pricePerItem;
                         });
                       },
                     ),
-                  ],
-                ),
-              ],
+
+                  if (isIncome)
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'รายรับเข้า',
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        incomeAmount = double.tryParse(value) ?? 0;
+                        setStateDialog(() {
+                          amount = incomeAmount;
+                        });
+                      },
+                    )
+                  else
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'ราคาต่อชิ้น',
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        pricePerItem = double.tryParse(value) ?? 0;
+                        setStateDialog(() {
+                          amount = quantity * pricePerItem;
+                        });
+                      },
+                    ),
+
+                  const SizedBox(height: 10),
+
+                  Text(
+                    'รวม: ${amount.toStringAsFixed(2)} บาท',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "วันที่: ${addDate.day}/${addDate.month}/${addDate.year}",
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: addDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+
+                          if (picked != null) {
+                            setStateDialog(() {
+                              addDate = picked;
+                            });
+                          }
+                        },
+                        child: const Text("เลือกวันที่"),
+                      ),
+                    ],
+                  ),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(isIncome ? 'รายรับ 💰' : 'รายจ่าย 💸'),
+                      Switch(
+                        value: isIncome,
+                        onChanged: (value) {
+                          setStateDialog(() {
+                            isIncome = value;
+                            amount = 0;
+                            incomeAmount = 0;
+                            pricePerItem = 0;
+                            quantity = 1;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('ยกเลิก'),
+              ),
+              ElevatedButton(
                 onPressed: () {
-                  addTransaction(title, amount, isIncome, selectedDate); // 👈 ใช้ตัวนี้
+                  if (title.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('กรุณากรอกชื่อรายการ')),
+                    );
+                    return;
+                  }
+
+                  if (isIncome) {
+                    if (incomeAmount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('กรุณากรอกรายรับเข้า')),
+                      );
+                      return;
+                    }
+
+                    addTransaction(
+                      title,
+                      incomeAmount,
+                      incomeAmount,
+                      true,
+                      addDate,
+                      0,
+                      0,
+                    );
+                  } else {
+                    if (quantity <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('จำนวนชิ้นต้องมากกว่า 0')),
+                      );
+                      return;
+                    }
+
+                    if (pricePerItem <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('กรุณากรอกราคาต่อชิ้น')),
+                      );
+                      return;
+                    }
+
+                    final total = quantity * pricePerItem;
+
+                    addTransaction(
+                      title,
+                      total,
+                      0,
+                      false,
+                      addDate,
+                      quantity,
+                      pricePerItem,
+                    );
+                  }
+
                   Navigator.pop(context);
                 },
-                child: Text('บันทึก'),
-              )
+                child: const Text('บันทึก'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void showEditDialog(int index, Transaction transaction) {
+    if (index < 0 || index >= transactions.length) return;
+
+    String title = transaction.title;
+    int quantity = transaction.quantity == 0 ? 1 : transaction.quantity;
+    double pricePerItem = transaction.pricePerItem;
+    double incomeAmount = transaction.incomeAmount;
+    double amount = transaction.amount;
+    bool isIncome = transaction.isIncome;
+    DateTime editDate = transaction.date;
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text('แก้ไขรายการ'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    initialValue: title,
+                    decoration: const InputDecoration(
+                      labelText: 'ชื่อรายการ',
+                    ),
+                    onChanged: (v) => title = v,
+                  ),
+
+                  if (!isIncome)
+                    TextFormField(
+                      initialValue: quantity.toString(),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'จำนวนชิ้น',
+                      ),
+                      onChanged: (v) {
+                        quantity = int.tryParse(v) ?? 1;
+                        setStateDialog(() {
+                          amount = quantity * pricePerItem;
+                        });
+                      },
+                    ),
+
+                  if (isIncome)
+                    TextFormField(
+                      initialValue: incomeAmount.toString(),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'รายรับเข้า',
+                      ),
+                      onChanged: (v) {
+                        incomeAmount = double.tryParse(v) ?? 0;
+                        setStateDialog(() {
+                          amount = incomeAmount;
+                        });
+                      },
+                    )
+                  else
+                    TextFormField(
+                      initialValue: pricePerItem.toString(),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'ราคาต่อชิ้น',
+                      ),
+                      onChanged: (v) {
+                        pricePerItem = double.tryParse(v) ?? 0;
+                        setStateDialog(() {
+                          amount = quantity * pricePerItem;
+                        });
+                      },
+                    ),
+
+                  const SizedBox(height: 10),
+
+                  Text(
+                    'รวม ${amount.toStringAsFixed(2)} บาท',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "วันที่: ${editDate.day}/${editDate.month}/${editDate.year}",
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: editDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+
+                          if (picked != null) {
+                            setStateDialog(() {
+                              editDate = picked;
+                            });
+                          }
+                        },
+                        child: const Text("เลือกวันที่"),
+                      ),
+                    ],
+                  ),
+
+                  SwitchListTile(
+                    value: isIncome,
+                    title: Text(isIncome ? 'รายรับ 💰' : 'รายจ่าย 💸'),
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        isIncome = value;
+                        amount = 0;
+                        incomeAmount = 0;
+                        pricePerItem = 0;
+                        quantity = 1;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                child: const Text(
+                  'ลบ',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('ยืนยันการลบ'),
+                      content: Text('ต้องการลบ "$title" ใช่หรือไม่'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('ยกเลิก'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('ลบ'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    setState(() {
+                      transactions.removeAt(index);
+                    });
+
+                    Navigator.of(context, rootNavigator: true).pop();
+                  }
+                },
+              ),
+
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('ยกเลิก'),
+              ),
+
+              ElevatedButton(
+                onPressed: () {
+                  if (title.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('กรุณากรอกชื่อรายการ')),
+                    );
+                    return;
+                  }
+
+                  if (isIncome) {
+                    if (incomeAmount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('กรุณากรอกรายรับเข้า')),
+                      );
+                      return;
+                    }
+
+                    updateTransaction(
+                      index,
+                      Transaction(
+                        title: title,
+                        amount: incomeAmount,
+                        incomeAmount: incomeAmount,
+                        isIncome: true,
+                        date: editDate,
+                        quantity: 0,
+                        pricePerItem: 0,
+                      ),
+                    );
+                  } else {
+                    if (quantity <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('จำนวนชิ้นต้องมากกว่า 0')),
+                      );
+                      return;
+                    }
+
+                    if (pricePerItem <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('กรุณากรอกราคาต่อชิ้น')),
+                      );
+                      return;
+                    }
+
+                    final total = quantity * pricePerItem;
+
+                    updateTransaction(
+                      index,
+                      Transaction(
+                        title: title,
+                        amount: total,
+                        incomeAmount: 0,
+                        isIncome: false,
+                        date: editDate,
+                        quantity: quantity,
+                        pricePerItem: pricePerItem,
+                      ),
+                    );
+                  }
+
+                  Navigator.pop(context);
+                },
+                child: const Text('บันทึก'),
+              ),
             ],
           );
         },
@@ -198,299 +552,254 @@ class _HomePageState extends State<HomePage> {
       });
     }
   }
+
   Future<void> generateAndSharePdf(
-  BuildContext context,
-  List<Transaction> transactions,
-) async {
-  final pdf = pw.Document();
+    BuildContext context,
+    List<Transaction> pdfTransactions,
+  ) async {
+    if (pdfTransactions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่มีข้อมูลสำหรับสร้าง PDF')),
+      );
+      return;
+    }
 
-  // ฟอนต์
-  final fontData = await rootBundle.load("assets/fonts/Prompt-Regular.ttf");
-  final ttf = pw.Font.ttf(fontData);
+    final pdf = pw.Document();
 
-  final boldFontData =
-      await rootBundle.load("assets/fonts/Prompt-Bold.ttf");
-  final ttfBold = pw.Font.ttf(boldFontData);
+    final fontData = await rootBundle.load("assets/fonts/Prompt-Regular.ttf");
+    final ttf = pw.Font.ttf(fontData);
 
-  final formatter = NumberFormat('#,###');
+    final boldFontData = await rootBundle.load("assets/fonts/Prompt-Bold.ttf");
+    final ttfBold = pw.Font.ttf(boldFontData);
 
-  double totalIncome = transactions
-      .where((t) => t.isIncome)
-      .fold(0, (sum, t) => sum + t.amount);
+    final formatter = NumberFormat('#,###.##');
 
-  double totalExpense = transactions
-      .where((t) => !t.isIncome)
-      .fold(0, (sum, t) => sum + t.amount);
+    final totalIncome = pdfTransactions
+        .where((t) => t.isIncome)
+        .fold<double>(0, (sum, t) => sum + t.amount);
 
-  double balance = totalIncome - totalExpense;
+    final totalExpense = pdfTransactions
+        .where((t) => !t.isIncome)
+        .fold<double>(0, (sum, t) => sum + t.amount);
 
-  pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(24),
+    final balance = totalIncome - totalExpense;
 
-      // ✅ Header ทุกหน้า
-      header: (context) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            'รายงานรายรับรายจ่าย',
-            style: pw.TextStyle(font: ttfBold, fontSize: 20),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Divider(),
-        ],
-      ),
-
-      // ✅ Footer เลขหน้า
-      footer: (context) => pw.Container(
-        alignment: pw.Alignment.centerRight,
+    pw.Widget headerCell(String text) {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.all(4),
         child: pw.Text(
-          'หน้า ${context.pageNumber} / ${context.pagesCount}',
-          style: pw.TextStyle(font: ttf, fontSize: 10),
+          text,
+          style: pw.TextStyle(font: ttfBold, fontSize: 9),
         ),
-      ),
+      );
+    }
 
-      build: (context) => [
-        pw.SizedBox(height: 10),
-
-        // ✅ Summary
-        pw.Text(
-          'รายรับ: ${formatter.format(totalIncome)}',
-          style: pw.TextStyle(font: ttf),
-        ),
-        pw.Text(
-          'รายจ่าย: ${formatter.format(totalExpense)}',
-          style: pw.TextStyle(font: ttf),
-        ),
-        pw.Text(
-          'คงเหลือ: ${formatter.format(balance)}',
-          style: pw.TextStyle(font: ttf),
-        ),
-
-        pw.SizedBox(height: 20),
-
-        // ✅ Header ตาราง
-        pw.Container(
-          padding: const pw.EdgeInsets.all(6),
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(width: 0.5),
+    pw.Widget cell(String text, {pw.Font? font, PdfColor? color}) {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.all(4),
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(
+            font: font ?? ttf,
+            fontSize: 9,
+            color: color,
           ),
-          child: pw.Row(
+        ),
+      );
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
+        header: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'รายงานรายรับรายจ่าย',
+              style: pw.TextStyle(font: ttfBold, fontSize: 20),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Divider(),
+          ],
+        ),
+        footer: (context) => pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'หน้า ${context.pageNumber} / ${context.pagesCount}',
+            style: pw.TextStyle(font: ttf, fontSize: 10),
+          ),
+        ),
+        build: (context) => [
+          pw.SizedBox(height: 20),
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.5),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(1.8),
+              1: const pw.FlexColumnWidth(3.5),
+              2: const pw.FlexColumnWidth(1),
+              3: const pw.FlexColumnWidth(1.5),
+              4: const pw.FlexColumnWidth(1.5),
+              5: const pw.FlexColumnWidth(1.3),
+              6: const pw.FlexColumnWidth(1.5),
+            },
             children: [
-              pw.Expanded(
-                flex: 2,
-                child: pw.Text('วันที่', style: pw.TextStyle(font: ttfBold)),
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.grey300,
+                ),
+                children: [
+                  headerCell('วันที่'),
+                  headerCell('รายการ'),
+                  headerCell('จำนวน'),
+                  headerCell('ราคาต่อชิ้น'),
+                  headerCell('รายรับเข้า'),
+                  headerCell('ประเภท'),
+                  headerCell('จำนวนเงิน'),
+                ],
               ),
-              pw.Expanded(
-                flex: 3,
-                child: pw.Text('รายการ', style: pw.TextStyle(font: ttfBold)),
-              ),
-              pw.Expanded(
-                flex: 2,
-                child: pw.Text('ประเภท', style: pw.TextStyle(font: ttfBold)),
-              ),
-              pw.Expanded(
-                flex: 2,
-                child: pw.Text('จำนวนเงิน', style: pw.TextStyle(font: ttfBold)),
+              ...pdfTransactions.map(
+                (t) => pw.TableRow(
+                  children: [
+                    cell(DateFormat('dd/MM/yyyy').format(t.date)),
+                    cell(t.title),
+                    cell(t.isIncome ? '-' : t.quantity.toString()),
+                    cell(t.isIncome ? '-' : formatter.format(t.pricePerItem)),
+                    cell(t.isIncome ? formatter.format(t.incomeAmount) : '-'),
+                    cell(
+                      t.isIncome ? 'รายรับ' : 'รายจ่าย',
+                      font: ttfBold,
+                      color: t.isIncome ? PdfColors.green : PdfColors.red,
+                    ),
+                    cell(
+                      '${t.isIncome ? '+' : '-'}${formatter.format(t.amount)}',
+                      font: ttfBold,
+                      color: t.isIncome ? PdfColors.green : PdfColors.red,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        ),
-
-        // ✅ รายการ (สำคัญมาก → ใช้ Column + map)
-        pw.Column(
-          children: transactions.map((t) {
-            return pw.Container(
-              padding: const pw.EdgeInsets.symmetric(vertical: 4),
+          pw.SizedBox(height: 20),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Container(
+              width: 250,
+              padding: const pw.EdgeInsets.all(8),
               decoration: pw.BoxDecoration(
-                border: pw.Border(
-                  bottom: pw.BorderSide(width: 0.2),
-                ),
+                border: pw.Border.all(width: 0.5),
               ),
-              child: pw.Row(
+              child: pw.Column(
                 children: [
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Text(
-                      DateFormat('dd/MM/yyyy').format(t.date),
-                      style: pw.TextStyle(font: ttf),
-                    ),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('รวมรายรับ', style: pw.TextStyle(font: ttfBold)),
+                      pw.Text(formatter.format(totalIncome),
+                          style: pw.TextStyle(font: ttf)),
+                    ],
                   ),
-                  pw.Expanded(
-                    flex: 3,
-                    child: pw.Text(t.title, style: pw.TextStyle(font: ttf)),
+                  pw.SizedBox(height: 4),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('รวมรายจ่าย',
+                          style: pw.TextStyle(font: ttfBold)),
+                      pw.Text(formatter.format(totalExpense),
+                          style: pw.TextStyle(font: ttf)),
+                    ],
                   ),
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Text(
-                      t.isIncome ? 'รายรับ' : 'รายจ่าย',
-                      style: pw.TextStyle(font: ttf),
-                    ),
-                  ),
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Text(
-                      formatter.format(t.amount),
-                      style: pw.TextStyle(font: ttf),
-                    ),
+                  pw.Divider(),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        'คงเหลือ',
+                        style: pw.TextStyle(font: ttfBold, fontSize: 14),
+                      ),
+                      pw.Text(
+                        formatter.format(balance),
+                        style: pw.TextStyle(font: ttfBold, fontSize: 14),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            );
-          }).toList(),
-        ),
-      ],
-    ),
-  );
-
-  final bytes = await pdf.save();
-
-  // ✅ Web / Mobile แยก
-  if (kIsWeb) {
-    final blob = html.Blob([bytes]);
-    final url = html.Url.createObjectUrlFromBlob(blob);
-
-    html.AnchorElement(href: url)
-      ..setAttribute("download", "report.pdf")
-      ..click();
-
-    html.window.open(url, "_blank");
-
-    Future.delayed(Duration(seconds: 1), () {
-      html.Url.revokeObjectUrl(url);
-    });
-
-  } else {
-    final dir = await getTemporaryDirectory();
-    final file = io.File("${dir.path}/report.pdf");
-    await file.writeAsBytes(bytes);
-
-    final box = context.findRenderObject() as RenderBox?;
-
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'รายงานรายรับรายจ่าย',
-      sharePositionOrigin:
-          box!.localToGlobal(Offset.zero) & box.size,
+            ),
+          ),
+        ],
+      ),
     );
+
+    final bytes = await pdf.save();
+
+    if (kIsWeb) {
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+
+      html.AnchorElement(href: url)
+        ..setAttribute("download", "report.pdf")
+        ..click();
+
+      html.Url.revokeObjectUrl(url);
+    } else {
+      final dir = await getTemporaryDirectory();
+      final file = io.File("${dir.path}/report.pdf");
+
+      await file.writeAsBytes(bytes, flush: true);
+
+      final box = context.findRenderObject() as RenderBox?;
+
+      await Share.shareXFiles(
+        [
+          XFile(
+            file.path,
+            name: 'report.pdf',
+            mimeType: 'application/pdf',
+          ),
+        ],
+        subject: 'รายงานรายรับรายจ่าย',
+        text: 'รายงานรายรับรายจ่าย',
+        sharePositionOrigin:
+            box != null ? box.localToGlobal(Offset.zero) & box.size : null,
+      );
+    }
   }
-}
-
-  // Future<void> generateAndSharePdf(List<Transaction> transactions) async {
-  //   final pdf = pw.Document();
-
-  //   // โหลดฟอนต์ไทย
-  //   final fontData = await rootBundle.load("assets/fonts/Prompt-Regular.ttf");
-  //   final ttf = pw.Font.ttf(fontData);
-
-  //   final boldFontData =
-  //       await rootBundle.load("assets/fonts/Prompt-Bold.ttf");
-  //   final ttfBold = pw.Font.ttf(boldFontData);
-
-  //   final formatter = NumberFormat('#,###');
-
-  //   double totalIncome = transactions
-  //       .where((t) => t.isIncome)
-  //       .fold(0, (sum, t) => sum + t.amount);
-
-  //   double totalExpense = transactions
-  //       .where((t) => !t.isIncome)
-  //       .fold(0, (sum, t) => sum + t.amount);
-
-  //   double balance = totalIncome - totalExpense;
-
-  //   pdf.addPage(
-  //     pw.Page(
-  //       build: (context) {
-  //         return pw.DefaultTextStyle(
-  //           style: pw.TextStyle(font: ttf, fontSize: 12),
-  //           child: pw.Column(
-  //             crossAxisAlignment: pw.CrossAxisAlignment.start,
-  //             children: [
-  //               pw.Text(
-  //                 'รายงานรายรับรายจ่าย',
-  //                 style: pw.TextStyle(
-  //                   font: ttfBold,
-  //                   fontSize: 20,
-  //                 ),
-  //               ),
-
-  //               pw.SizedBox(height: 10),
-
-  //               pw.Text('รายรับ: ${formatter.format(totalIncome)}'),
-  //               pw.Text('รายจ่าย: ${formatter.format(totalExpense)}'),
-  //               pw.Text('คงเหลือ: ${formatter.format(balance)}'),
-
-  //               pw.SizedBox(height: 20),
-
-  //               pw.Table.fromTextArray(
-  //                 headers: ['วันที่','รายการ', 'ประเภท', 'จำนวนเงิน'],
-  //                 data: transactions.map((t) {
-  //                   return [
-  //                     DateFormat('dd/MM/yyyy').format(t.date),
-  //                     t.title,
-  //                     t.isIncome ? 'รายรับ' : 'รายจ่าย',
-  //                     formatter.format(t.amount),
-  //                   ];
-  //                 }).toList(),
-  //                 headerStyle: pw.TextStyle(font: ttfBold),
-  //                 cellStyle: pw.TextStyle(font: ttf),
-  //               ),
-  //             ],
-  //           ),
-  //         );
-  //       },
-  //     ),
-  //   );
-
-  //   final output = await getTemporaryDirectory();
-  //   final file = File("${output.path}/report.pdf");
-  //   await file.writeAsBytes(await pdf.save());
-
-  //   final box = context.findRenderObject() as RenderBox?;
-
-  //   await Share.shareXFiles(
-  //     [XFile(file.path)],
-  //     text: 'รายงานรายรับรายจ่าย',
-  //     sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
-  //   );
-  // }
 
   @override
   Widget build(BuildContext context) {
     double balance = totalIncome - totalExpense;
-    final formatter = NumberFormat('#,###');
+    final formatter = NumberFormat('#,###.##');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('รายรับรายจ่าย'),
+        title: const Text('รายรับรายจ่าย'),
         actions: [
           IconButton(
-            icon: Icon(Icons.calendar_month),
+            icon: const Icon(Icons.calendar_month),
             onPressed: pickDate,
           )
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: showAddDialog,
-        child: Icon(Icons.add),
+        child: const Icon(Icons.add),
       ),
       body: Column(
         children: [
-          // 🔵 Balance Card
           Container(
             width: double.infinity,
-            margin: EdgeInsets.all(16),
-            padding: EdgeInsets.all(24),
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
                   color: Colors.black26,
                   blurRadius: 10,
@@ -501,17 +810,17 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'ยอดคงเหลือ',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 16,
                   ),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 Text(
-                  '฿ ${formatter.format(balance)}',
-                  style: TextStyle(
+                  '${formatter.format(balance)} บาท',
+                  style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
@@ -521,7 +830,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // 🔘 Button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -529,17 +837,24 @@ class _HomePageState extends State<HomePage> {
               children: [
                 ElevatedButton.icon(
                   onPressed: () async {
+                    if (transactions.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('ไม่มีข้อมูลสำหรับสร้าง PDF'),
+                        ),
+                      );
+                      return;
+                    }
+
                     await generateAndSharePdf(context, transactions);
                   },
-                  icon: Icon(Icons.picture_as_pdf),
-                  label: Text('แชร์ PDF'),
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('แชร์ PDF'),
                 ),
               ],
             ),
           ),
-          //Padding( padding: const EdgeInsets.symmetric(horizontal: 16),  child: ElevatedButton.icon( onPressed: () { generateAndSharePdf(filteredTransactions); }, icon: Icon(Icons.picture_as_pdf), label: Text('แชร์ PDF'), ), ),
 
-          // 📅 แสดงวันที่ที่เลือก
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             child: Row(
@@ -547,35 +862,29 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(
                   "วันที่: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
           ),
-          // Padding(
-          //   padding: const EdgeInsets.symmetric(vertical: 8),
-          //   child: Text(
-          //     "วันที่: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
-          //     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          //   ),
-          // ),
 
-          SizedBox(height: 8),
-
-          // 📋 List
           Expanded(
             child: ListView.builder(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: filteredTransactions.length,
               itemBuilder: (context, index) {
                 final t = filteredTransactions[index];
+                final realIndex = transactions.indexOf(t);
 
                 return Container(
-                  margin: EdgeInsets.only(bottom: 10),
+                  margin: const EdgeInsets.only(bottom: 10),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
+                    boxShadow: const [
                       BoxShadow(
                         color: Colors.black12,
                         blurRadius: 6,
@@ -584,26 +893,68 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   child: ListTile(
+                    onTap: () {
+                      showEditDialog(realIndex, t);
+                    },
                     leading: CircleAvatar(
-                      backgroundColor: t.isIncome
-                          ? Colors.greenAccent
-                          : Colors.redAccent,
+                      backgroundColor:
+                          t.isIncome ? Colors.greenAccent : Colors.redAccent,
                       child: Icon(
-                        t.isIncome ? Icons.arrow_downward : Icons.arrow_upward,
+                        t.isIncome
+                            ? Icons.arrow_downward
+                            : Icons.arrow_upward,
                         color: Colors.white,
                         size: 18,
                       ),
                     ),
                     title: Text(
                       t.title,
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    trailing: Text(
-                      '${t.isIncome ? '+' : '-'}฿${formatter.format(t.amount)}',
-                      style: TextStyle(
-                        color: t.isIncome ? Colors.green : Colors.red,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    subtitle: Text(
+                      t.isIncome
+                          ? 'รายรับเข้า ${formatter.format(t.incomeAmount)} บาท'
+                          : '${t.quantity} ชิ้น x ${formatter.format(t.pricePerItem)} บาท',
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${t.isIncome ? '+' : '-'} ${formatter.format(t.amount)} บาท',
+                          style: TextStyle(
+                            color: t.isIncome ? Colors.green : Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('ยืนยันการลบ'),
+                                content: Text('ต้องการลบ "${t.title}" ใช่ไหม?'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('ยกเลิก'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        transactions.removeAt(realIndex);
+                                      });
+
+                                      Navigator.pop(context);
+                                    },
+                                    child: const Text('ลบ'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 );
